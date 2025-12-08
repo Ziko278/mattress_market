@@ -1,11 +1,16 @@
 from django.db import models
 
 from backend import settings
+from django.utils.module_loading import import_string
+
+
+def get_storage():
+    return import_string(settings.STORAGE_BACKEND)()
 
 
 class SiteInfoModel(models.Model):
     site_name = models.CharField(max_length=200)
-    logo = models.ImageField(upload_to='site/', storage=settings.STORAGE_BACKEND)
+    logo = models.ImageField(upload_to='site/', storage=get_storage())
     phone = models.CharField(max_length=20)
     alternate_phone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField()
@@ -49,7 +54,7 @@ class SettingsModel(models.Model):
 class SliderModel(models.Model):
     title = models.CharField(max_length=200)
     subtitle = models.CharField(max_length=300, blank=True)
-    image = models.ImageField(upload_to='sliders/', storage=settings.STORAGE_BACKEND)
+    image = models.ImageField(upload_to='sliders/', storage=get_storage())
     brand = models.ForeignKey('products.BrandModel', on_delete=models.CASCADE, null=True, blank=True,
                               help_text="Leave empty for general slider")
     button_text = models.CharField(max_length=50, blank=True)

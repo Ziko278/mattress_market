@@ -1,11 +1,16 @@
 from django.db import models
 from backend import settings
 from slugify import slugify
+from django.utils.module_loading import import_string
+
+
+def get_storage():
+    return import_string(settings.STORAGE_BACKEND)()
 
 
 class BrandModel(models.Model):
     name = models.CharField(max_length=200)
-    logo = models.ImageField(upload_to='brands/', blank=True, null=True, storage=settings.STORAGE_BACKEND)
+    logo = models.ImageField(upload_to='brands/', blank=True, null=True, storage=get_storage())
     description = models.TextField(blank=True)
 
     def __str__(self):
@@ -18,7 +23,7 @@ class BrandModel(models.Model):
 class CategoryModel(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
-    image = models.ImageField(upload_to='categories/', storage=settings.STORAGE_BACKEND)
+    image = models.ImageField(upload_to='categories/', storage=get_storage())
 
     def __str__(self):
         return self.title.upper()
@@ -99,7 +104,7 @@ class ProductVariantModel(models.Model):
 
 class ProductImageModel(models.Model):
     product = models.ForeignKey(ProductModel, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='products/', storage=settings.STORAGE_BACKEND)
+    image = models.ImageField(upload_to='products/', storage=get_storage())
     is_main = models.BooleanField(default=False)
     order = models.IntegerField(default=0)
 
@@ -116,7 +121,7 @@ class ReviewModel(models.Model):
     email = models.EmailField()
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     comment = models.TextField()
-    image = models.ImageField(upload_to='reviews/', blank=True, null=True, storage=settings.STORAGE_BACKEND)
+    image = models.ImageField(upload_to='reviews/', blank=True, null=True, storage=get_storage())
     is_approved = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

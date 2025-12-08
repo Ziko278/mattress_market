@@ -1,6 +1,11 @@
 from django.db import models
 from backend import settings
 from slugify import slugify
+from django.utils.module_loading import import_string
+
+
+def get_storage():
+    return import_string(settings.STORAGE_BACKEND)()
 
 
 class BlogCategoryModel(models.Model):
@@ -36,7 +41,7 @@ class BlogPostModel(models.Model):
     category = models.ForeignKey(BlogCategoryModel, on_delete=models.CASCADE)
     tags = models.ManyToManyField(BlogTagModel, blank=True)
     excerpt = models.TextField(help_text="Short description for preview")
-    featured_image = models.ImageField(upload_to='blog/', storage=settings.STORAGE_BACKEND)
+    featured_image = models.ImageField(upload_to='blog/', storage=get_storage())
     content = models.JSONField(help_text="Rich text content stored as JSON")
     view_count = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
