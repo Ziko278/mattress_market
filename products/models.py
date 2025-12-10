@@ -48,7 +48,7 @@ class ProductWeightModel(models.Model):
 
 class ProductModel(models.Model):
     name = models.CharField(max_length=200)
-    slug = models.SlugField(blank=True, unique=True)
+    slug = models.SlugField(max_length=255, blank=True, unique=True)
     brand = models.ForeignKey(BrandModel, on_delete=models.CASCADE)
     category = models.ForeignKey(CategoryModel, on_delete=models.CASCADE)
     description = models.TextField()
