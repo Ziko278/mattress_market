@@ -56,7 +56,6 @@ class WeightListView(APIView):
         return Response(serializer.data)
     
 
-
 class ProductListView(APIView):
     """
     Get products with filters, search, and sorting with fair distribution
@@ -64,25 +63,31 @@ class ProductListView(APIView):
     pagination_class = StandardResultsPagination
 
     def get(self, request):
-        products = ProductModel.objects.all()
+        # Clear any default ordering
+        products = ProductModel.objects.all().order_by()
         
-        # Get or create session seed for consistent shuffle
+        # DEBUG: Print total products
+        print(f"Total products before filters: {products.count()}")
+        
+        # Session seed for shuffle
+        if not request.session.session_key:
+            request.session.create()
+        
         session_seed = request.session.get('product_shuffle_seed')
         if not session_seed:
-            # Create unique seed for this session
-            import random
-            session_seed = str(random.randint(1000000, 9999999))
+            session_seed = str(random.randint(100000, 999999))
             request.session['product_shuffle_seed'] = session_seed
+            request.session.modified = True
         
-        # Search functionality with multi-word support and relevance ranking
+        print(f"Session seed: {session_seed}")
+        
+        # Search functionality
         search_query = request.query_params.get('search', None)
         use_relevance_order = False
         
         if search_query:
-            # Split search query into words
             search_words = [word.strip() for word in search_query.strip().split() if word.strip()]
             
-            # Build Q objects for each word
             q_objects = Q()
             for word in search_words:
                 q_objects |= (
@@ -94,34 +99,15 @@ class ProductListView(APIView):
             
             products = products.filter(q_objects)
             
-            # Add relevance score - count how many search terms match
-            # This is database-agnostic
+            # Relevance score
             relevance_cases = []
             for word in search_words:
-                relevance_cases.append(
-                    When(
-                        Q(name__icontains=word),
-                        then=Value(1)
-                    )
-                )
-                relevance_cases.append(
-                    When(
-                        Q(brand__name__icontains=word),
-                        then=Value(1)
-                    )
-                )
-                relevance_cases.append(
-                    When(
-                        Q(description__icontains=word),
-                        then=Value(1)
-                    )
-                )
-                relevance_cases.append(
-                    When(
-                        Q(category__title__icontains=word),
-                        then=Value(1)
-                    )
-                )
+                relevance_cases.extend([
+                    When(Q(name__icontains=word), then=Value(1)),
+                    When(Q(brand__name__icontains=word), then=Value(1)),
+                    When(Q(description__icontains=word), then=Value(1)),
+                    When(Q(category__title__icontains=word), then=Value(1)),
+                ])
             
             products = products.annotate(
                 relevance=Case(
@@ -151,7 +137,6 @@ class ProductListView(APIView):
         min_price = request.query_params.get('min_price', None)
         max_price = request.query_params.get('max_price', None)
         if min_price or max_price:
-            # Annotate with min and max prices from variants
             products = products.annotate(
                 min_variant_price=Min('variants__price'),
                 max_variant_price=Max('variants__price')
@@ -171,11 +156,15 @@ class ProductListView(APIView):
         if is_new == 'true':
             products = products.filter(is_new_arrival=True)
 
-        # Sorting
+        # DEBUG: Print after filters
+        print(f"Products after filters: {products.count()}")
+
+        # Get sort parameter
         sort_by = request.query_params.get('sort', 'newest')
         
+        # Apply ordering
         if use_relevance_order:
-            # Search results ordered by relevance first
+            # Search results by relevance
             products = products.order_by('-relevance', '-created_at')
         elif sort_by == 'price_asc':
             products = products.annotate(
@@ -189,16 +178,26 @@ class ProductListView(APIView):
             products = products.order_by('-view_count')
         elif sort_by == 'newest':
             products = products.order_by('-created_at')
-        else:
-            # Default shuffle for fair brand distribution
-            # Use modulo operation with session seed for deterministic shuffle
-            seed_int = int(hashlib.md5(session_seed.encode()).hexdigest()[:8], 16)
-            products = products.annotate(
-                shuffle_key=F('id') % seed_int
-            ).order_by('shuffle_key', 'id')
+        elif sort_by == 'shuffle':
+            # SIMPLE SHUFFLE METHOD - Get all IDs and shuffle them
+            product_ids = list(products.values_list('id', flat=True))
+            
+            # Seed random with session seed for consistency
+            random.seed(session_seed)
+            random.shuffle(product_ids)
+            
+            # Create ordering based on shuffled IDs
+            id_order = Case(*[When(id=id, then=pos) for pos, id in enumerate(product_ids)])
+            products = products.annotate(order=id_order).order_by('order')
+            
+            print(f"Shuffled order (first 10 IDs): {product_ids[:10]}")
 
         # Remove duplicates
         products = products.distinct()
+
+        # DEBUG: Print final ordering
+        final_ids = list(products.values_list('id', flat=True)[:10])
+        print(f"Final product IDs (first 10): {final_ids}")
 
         # Pagination
         paginator = self.pagination_class()
@@ -212,7 +211,6 @@ class ProductListView(APIView):
         
         return paginator.get_paginated_response(serializer.data)
     
-
 class ProductDetailView(APIView):
     def get(self, request, slug):
         try:
