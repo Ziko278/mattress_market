@@ -5,6 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q, F, Max, Min, Count, Case, When, IntegerField, Value
 from django.db.models.functions import Concat
 import hashlib
+import random
 from django.db.models import Q, Avg
 
 from .models import (
