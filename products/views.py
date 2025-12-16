@@ -2,9 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q, F, Max, Min, Count, Case, When, IntegerField
-from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models.functions import Random
+from django.db.models import Q, F, Max, Min, Count, Case, When, IntegerField, Value
+from django.db.models.functions import Concat
 import hashlib
 from django.db.models import Q, Avg
 
@@ -57,6 +56,7 @@ class WeightListView(APIView):
         return Response(serializer.data)
     
 
+
 class ProductListView(APIView):
     """
     Get products with filters, search, and sorting with fair distribution
@@ -69,14 +69,18 @@ class ProductListView(APIView):
         # Get or create session seed for consistent shuffle
         session_seed = request.session.get('product_shuffle_seed')
         if not session_seed:
-            session_seed = hashlib.md5(str(request.session.session_key or '').encode()).hexdigest()[:8]
+            # Create unique seed for this session
+            import random
+            session_seed = str(random.randint(1000000, 9999999))
             request.session['product_shuffle_seed'] = session_seed
         
         # Search functionality with multi-word support and relevance ranking
         search_query = request.query_params.get('search', None)
+        use_relevance_order = False
+        
         if search_query:
             # Split search query into words
-            search_words = search_query.strip().split()
+            search_words = [word.strip() for word in search_query.strip().split() if word.strip()]
             
             # Build Q objects for each word
             q_objects = Q()
@@ -91,20 +95,42 @@ class ProductListView(APIView):
             products = products.filter(q_objects)
             
             # Add relevance score - count how many search terms match
-            relevance_score = Case(
-                *[When(
-                    Q(name__icontains=word) |
-                    Q(brand__name__icontains=word) |
-                    Q(description__icontains=word) |
-                    Q(category__title__icontains=word),
-                    then=1
-                ) for word in search_words],
-                default=0,
-                output_field=IntegerField()
-            )
+            # This is database-agnostic
+            relevance_cases = []
+            for word in search_words:
+                relevance_cases.append(
+                    When(
+                        Q(name__icontains=word),
+                        then=Value(1)
+                    )
+                )
+                relevance_cases.append(
+                    When(
+                        Q(brand__name__icontains=word),
+                        then=Value(1)
+                    )
+                )
+                relevance_cases.append(
+                    When(
+                        Q(description__icontains=word),
+                        then=Value(1)
+                    )
+                )
+                relevance_cases.append(
+                    When(
+                        Q(category__title__icontains=word),
+                        then=Value(1)
+                    )
+                )
+            
             products = products.annotate(
-                relevance=Count(relevance_score)
-            ).order_by('-relevance')
+                relevance=Case(
+                    *relevance_cases,
+                    default=Value(0),
+                    output_field=IntegerField()
+                )
+            )
+            use_relevance_order = True
 
         # Filter by weight
         weight_id = request.query_params.get('weight', None)
@@ -148,8 +174,10 @@ class ProductListView(APIView):
         # Sorting
         sort_by = request.query_params.get('sort', 'newest')
         
-        # Only apply shuffle if no search query (search has its own relevance ordering)
-        if sort_by == 'price_asc':
+        if use_relevance_order:
+            # Search results ordered by relevance first
+            products = products.order_by('-relevance', '-created_at')
+        elif sort_by == 'price_asc':
             products = products.annotate(
                 min_price=Min('variants__price')
             ).order_by('min_price')
@@ -159,16 +187,15 @@ class ProductListView(APIView):
             ).order_by('-max_price')
         elif sort_by == 'popular':
             products = products.order_by('-view_count')
-        elif not search_query:  # Only shuffle if no search
-            # Use deterministic shuffle based on session seed
-            # This ensures consistent order within a session
-            products = products.order_by(
-                F('id').bitor(int(session_seed, 16))
-            )
+        elif sort_by == 'newest':
+            products = products.order_by('-created_at')
         else:
-            # Default to newest, but search relevance takes precedence
-            if not search_query:
-                products = products.order_by('-created_at')
+            # Default shuffle for fair brand distribution
+            # Use modulo operation with session seed for deterministic shuffle
+            seed_int = int(hashlib.md5(session_seed.encode()).hexdigest()[:8], 16)
+            products = products.annotate(
+                shuffle_key=F('id') % seed_int
+            ).order_by('shuffle_key', 'id')
 
         # Remove duplicates
         products = products.distinct()
@@ -184,6 +211,7 @@ class ProductListView(APIView):
         )
         
         return paginator.get_paginated_response(serializer.data)
+    
 
 class ProductDetailView(APIView):
     def get(self, request, slug):
