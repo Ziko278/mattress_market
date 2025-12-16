@@ -1,7 +1,8 @@
 from django.urls import path
 from .views import (
     BrandListView, CategoryListView, ProductListView, ProductDetailView,
-    FeaturedProductsView, NewArrivalsView, RelatedProductsView, ProductReviewCreateView
+    FeaturedProductsView, NewArrivalsView, RelatedProductsView, ProductReviewCreateView,
+    WeightListView
 )
 from .admin_views import (
     AdminBrandListCreateView, AdminBrandDetailView,
@@ -17,12 +18,17 @@ urlpatterns = [
     # Public endpoints
     path('brands/', BrandListView.as_view(), name='brands'),
     path('categories/', CategoryListView.as_view(), name='categories'),
-    path('', ProductListView.as_view(), name='products'),
-    path('<slug:slug>/', ProductDetailView.as_view(), name='product-detail'),
+    path('weights/', WeightListView.as_view(), name='weights'),
     path('featured/', FeaturedProductsView.as_view(), name='featured-products'),
     path('new-arrivals/', NewArrivalsView.as_view(), name='new-arrivals'),
+    
+    path('', ProductListView.as_view(), name='products'),
+    path('<slug:slug>/', ProductDetailView.as_view(), name='product-detail'),
+    
     path('<int:product_id>/related/', RelatedProductsView.as_view(), name='related-products'),
     path('reviews/create/', ProductReviewCreateView.as_view(), name='review-create'),
+    
+    
 
     # Admin endpoints - Brands
     path('admin/brands/', AdminBrandListCreateView.as_view(), name='admin-brands'),

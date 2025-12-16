@@ -58,6 +58,16 @@ class ProductModel(models.Model):
     view_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['brand', 'category']),
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['-view_count']),
+            # For PostgreSQL full-text search (optional but recommended)
+            # GinIndex(fields=['name', 'description']),
+        ]
+
     def save(self, *args, **kwargs):
         self.slug = slugify(self.name.lower())
         super().save(*args, **kwargs)

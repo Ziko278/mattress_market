@@ -2,14 +2,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q, F, Max, Min, Count, Case, When, IntegerField
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
+from django.db.models.functions import Random
+import hashlib
 from django.db.models import Q, Avg
+
 from .models import (
     BrandModel, CategoryModel, ProductModel,
-    ProductVariantModel, ReviewModel
+    ProductVariantModel, ReviewModel, ProductWeightModel
 )
 from .serializers import (
     BrandSerializer, CategorySerializer, ProductListSerializer,
-    ProductDetailSerializer, ReviewCreateSerializer, ReviewSerializer
+    ProductDetailSerializer, ReviewCreateSerializer, ReviewSerializer, ProductWeightSerializer
 )
 
 
@@ -42,36 +47,69 @@ class CategoryListView(APIView):
         return Response(serializer.data)
 
 
+class WeightListView(APIView):
+    """
+    Public endpoint: List all available product weights for buyer's guide
+    """
+    def get(self, request):
+        weights = ProductWeightModel.objects.all().order_by('id')
+        serializer = ProductWeightSerializer(weights, many=True)
+        return Response(serializer.data)
+    
 
 class ProductListView(APIView):
     """
-    Get products with filters, search, and sorting
-
-    Query params:
-    - search: Search in product name, brand, description
-    - brand: Filter by brand ID
-    - category: Filter by category ID
-    - min_price: Minimum price
-    - max_price: Maximum price
-    - is_featured: true/false
-    - is_new: true/false
-    - sort: price_asc, price_desc, newest, popular
+    Get products with filters, search, and sorting with fair distribution
     """
     pagination_class = StandardResultsPagination
 
     def get(self, request):
-        # Start with all products
         products = ProductModel.objects.all()
-
-        # Search functionality - search in name, brand, description
+        
+        # Get or create session seed for consistent shuffle
+        session_seed = request.session.get('product_shuffle_seed')
+        if not session_seed:
+            session_seed = hashlib.md5(str(request.session.session_key or '').encode()).hexdigest()[:8]
+            request.session['product_shuffle_seed'] = session_seed
+        
+        # Search functionality with multi-word support and relevance ranking
         search_query = request.query_params.get('search', None)
         if search_query:
-            products = products.filter(
-                Q(name__icontains=search_query) |
-                Q(brand__name__icontains=search_query) |
-                Q(description__icontains=search_query) |
-                Q(category__title__icontains=search_query)
+            # Split search query into words
+            search_words = search_query.strip().split()
+            
+            # Build Q objects for each word
+            q_objects = Q()
+            for word in search_words:
+                q_objects |= (
+                    Q(name__icontains=word) |
+                    Q(brand__name__icontains=word) |
+                    Q(description__icontains=word) |
+                    Q(category__title__icontains=word)
+                )
+            
+            products = products.filter(q_objects)
+            
+            # Add relevance score - count how many search terms match
+            relevance_score = Case(
+                *[When(
+                    Q(name__icontains=word) |
+                    Q(brand__name__icontains=word) |
+                    Q(description__icontains=word) |
+                    Q(category__title__icontains=word),
+                    then=1
+                ) for word in search_words],
+                default=0,
+                output_field=IntegerField()
             )
+            products = products.annotate(
+                relevance=Count(relevance_score)
+            ).order_by('-relevance')
+
+        # Filter by weight
+        weight_id = request.query_params.get('weight', None)
+        if weight_id:
+            products = products.filter(weight_id=weight_id)
 
         # Filter by brand
         brand_id = request.query_params.get('brand', None)
@@ -83,13 +121,19 @@ class ProductListView(APIView):
         if category_id:
             products = products.filter(category_id=category_id)
 
-        # Filter by price range (check variants)
+        # Filter by price range
         min_price = request.query_params.get('min_price', None)
         max_price = request.query_params.get('max_price', None)
-        if min_price:
-            products = products.filter(variants__price__gte=min_price).distinct()
-        if max_price:
-            products = products.filter(variants__price__lte=max_price).distinct()
+        if min_price or max_price:
+            # Annotate with min and max prices from variants
+            products = products.annotate(
+                min_variant_price=Min('variants__price'),
+                max_variant_price=Max('variants__price')
+            )
+            if min_price:
+                products = products.filter(min_variant_price__gte=min_price)
+            if max_price:
+                products = products.filter(max_variant_price__lte=max_price)
 
         # Filter featured products
         is_featured = request.query_params.get('is_featured', None)
@@ -103,28 +147,43 @@ class ProductListView(APIView):
 
         # Sorting
         sort_by = request.query_params.get('sort', 'newest')
+        
+        # Only apply shuffle if no search query (search has its own relevance ordering)
         if sort_by == 'price_asc':
-            # Sort by minimum variant price (ascending)
-            products = products.order_by('variants__price')
+            products = products.annotate(
+                min_price=Min('variants__price')
+            ).order_by('min_price')
         elif sort_by == 'price_desc':
-            # Sort by maximum variant price (descending)
-            products = products.order_by('-variants__price')
+            products = products.annotate(
+                max_price=Max('variants__price')
+            ).order_by('-max_price')
         elif sort_by == 'popular':
-            # Sort by view count
             products = products.order_by('-view_count')
-        else:  # newest (default)
-            products = products.order_by('-created_at')
+        elif not search_query:  # Only shuffle if no search
+            # Use deterministic shuffle based on session seed
+            # This ensures consistent order within a session
+            products = products.order_by(
+                F('id').bitor(int(session_seed, 16))
+            )
+        else:
+            # Default to newest, but search relevance takes precedence
+            if not search_query:
+                products = products.order_by('-created_at')
 
-        # Remove duplicates (can occur with variant filtering)
+        # Remove duplicates
         products = products.distinct()
 
         # Pagination
         paginator = self.pagination_class()
         paginated_products = paginator.paginate_queryset(products, request)
         
-        serializer = ProductListSerializer(paginated_products, many=True, context={'request': request})  # Add context
+        serializer = ProductListSerializer(
+            paginated_products, 
+            many=True, 
+            context={'request': request}
+        )
+        
         return paginator.get_paginated_response(serializer.data)
-
 
 class ProductDetailView(APIView):
     def get(self, request, slug):
