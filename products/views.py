@@ -162,6 +162,7 @@ class ProductListView(APIView):
 
         # Get sort parameter
         sort_by = request.query_params.get('sort', 'newest')
+        print(sort_by)
         
         # Apply ordering
         if use_relevance_order:
