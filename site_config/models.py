@@ -36,6 +36,7 @@ class SettingsModel(models.Model):
     allow_pay_on_delivery = models.BooleanField(default=True)
     allow_online_payment = models.BooleanField(default=True)
     free_shipping_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    shipping_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)  
     terms_and_conditions = models.TextField(blank=True)
 
     class Meta:

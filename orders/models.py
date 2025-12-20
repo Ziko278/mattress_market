@@ -9,8 +9,6 @@ class AddressModel(models.Model):
     phone = models.CharField(max_length=20)
     alternate_phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
     is_default = models.BooleanField(default=False)
 
     def __str__(self):
@@ -41,8 +39,6 @@ class OrderModel(models.Model):
 
     # Shipping address
     shipping_address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
 
     # Order details
     payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES)

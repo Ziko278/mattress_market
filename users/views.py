@@ -171,4 +171,25 @@ class PasswordChangeView(APIView):
         user.save()
 
         return Response({"message": "Password changed successfully"})
-    
+
+
+class UserProfileWithAddressView(APIView):
+    """
+    Get authenticated user's profile with default address
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from orders.models import AddressModel
+        from orders.serializers import AddressSerializer
+        
+        user_data = UserSerializer(request.user).data
+        
+        # Get default address if exists
+        try:
+            default_address = AddressModel.objects.get(user=request.user, is_default=True)
+            user_data['default_address'] = AddressSerializer(default_address).data
+        except AddressModel.DoesNotExist:
+            user_data['default_address'] = None
+        
+        return Response(user_data)

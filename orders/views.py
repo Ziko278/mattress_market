@@ -205,3 +205,5 @@ class AddressDeleteView(APIView):
             return Response({"message": "Address deleted"}, status=status.HTTP_200_OK)
         except AddressModel.DoesNotExist:
             return Response({"error": "Address not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+
