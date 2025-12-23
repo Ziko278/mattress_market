@@ -30,9 +30,7 @@ Subtotal: ₦{{ item.subtotal|floatformat:2 }}
 TOTALS
 -----------------------------------------------
 
-{% with subtotal=order.total_amount|add:-order.logistic_price %}
 Subtotal: ₦{{ subtotal|floatformat:2 }}
-{% endwith %}
 Shipping Fee: {% if order.logistic_price == 0 %}FREE{% else %}₦{{ order.logistic_price|floatformat:2 }}{% endif %}
 -----------------------------------------------
 TOTAL AMOUNT: ₦{{ order.total_amount|floatformat:2 }}
@@ -64,7 +62,7 @@ WHAT HAPPENS NEXT?
 
 ✓ We'll verify your order and prepare it for shipment
 ✓ You'll receive a notification when your order ships
-✓ Our delivery partner will contact you for coordination
+✓ Our delivery partner will contact you for delivery coordination
 ✓ Enjoy your new mattress and quality sleep!
 
 -----------------------------------------------

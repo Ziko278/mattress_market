@@ -44,7 +44,13 @@ def send_order_confirmation(order):
         subject = f"Order Confirmation — {order.order_id}"
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@mattressmarket.ng')
 
-        context = {'order': order}
+        # Calculate subtotal in Python (avoid template syntax issues)
+        subtotal = order.total_amount - order.logistic_price
+        
+        context = {
+            'order': order,
+            'subtotal': subtotal
+        }
 
         # Render templates with proper error logging
         try:
@@ -66,7 +72,7 @@ def send_order_confirmation(order):
     except Exception as exc:
         logger.exception("Failed to send order confirmation: %s", exc)
         return False
-
+    
 
 class OrderCreateView(APIView):
     """
