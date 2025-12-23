@@ -20,9 +20,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def send_order_confirmation(order):
     """
     Send order confirmation email to customer AND admin list.
+    This function is safe: it logs exceptions and does not raise.
+    Expects order to have: customer_email, customer_name, order_id, items, total_amount
     """
     try:
         customer_email = getattr(order, 'customer_email', None)
@@ -43,6 +46,7 @@ def send_order_confirmation(order):
 
         context = {'order': order}
 
+        # Render templates with proper error logging
         try:
             html_body = render_to_string('emails/order_confirmation.html', context)
             text_body = render_to_string('emails/order_confirmation.txt', context)
