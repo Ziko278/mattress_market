@@ -30,7 +30,7 @@ Subtotal: ₦{{ item.subtotal|floatformat:2 }}
 TOTALS
 -----------------------------------------------
 
-{% with subtotal=order.total_amount|add:order.logistic_price %}
+{% with subtotal=order.total_amount|add:-order.logistic_price %}
 Subtotal: ₦{{ subtotal|floatformat:2 }}
 {% endwith %}
 Shipping Fee: {% if order.logistic_price == 0 %}FREE{% else %}₦{{ order.logistic_price|floatformat:2 }}{% endif %}
