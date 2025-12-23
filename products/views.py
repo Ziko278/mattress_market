@@ -55,153 +55,148 @@ class WeightListView(APIView):
         weights = ProductWeightModel.objects.all().order_by('id')
         serializer = ProductWeightSerializer(weights, many=True)
         return Response(serializer.data)
-    
 
 class ProductListView(APIView):
     """
-    Get products with filters, search, and sorting with fair distribution
+    Get products with filters, intelligent search, and session-consistent shuffling.
     """
     pagination_class = StandardResultsPagination
 
+    # Words to ignore if the search query contains other distinct words
+    STOP_WORDS = {
+        'pillow', 'pillows', 'mattress', 'mattresses', 'foam', 'foams',
+        'vitafoam', 'mouka', 'moukafoam', 'winco', 'wincofoam', 'bed', 'bedding'
+    }
+
     def get(self, request):
-        # Clear any default ordering
-        products = ProductModel.objects.all().order_by()
-        
-        # DEBUG: Print total products
-        print(f"Total products before filters: {products.count()}")
-        
-        # Session seed for shuffle
-        if not request.session.session_key:
-            request.session.create()
-        
-        session_seed = request.session.get('product_shuffle_seed')
-        if not session_seed:
-            session_seed = str(random.randint(100000, 999999))
-            request.session['product_shuffle_seed'] = session_seed
-            request.session.modified = True
-        
-        print(f"Session seed: {session_seed}")
-        
-        # Search functionality
-        search_query = request.query_params.get('search', None)
-        use_relevance_order = False
+        products = ProductModel.objects.all()
+
+        # ---------------------------------------------------------
+        # 1. HANDLE SEARCH (Intelligent Filtering)
+        # ---------------------------------------------------------
+        search_query = request.query_params.get('search', '').strip()
         
         if search_query:
-            search_words = [word.strip() for word in search_query.strip().split() if word.strip()]
+            # Split query into words
+            raw_words = [w.lower() for w in search_query.split() if w.strip()]
             
-            q_objects = Q()
+            # Filter Logic: 
+            # If we have more than 1 word, try to remove STOP_WORDS.
+            # Example 1: "Vita Helix Mattress" -> becomes ["vita", "helix"]
+            # Example 2: "Mattress" -> remains ["mattress"] (because it's the only word)
+            if len(raw_words) > 1:
+                filtered_words = [w for w in raw_words if w not in self.STOP_WORDS]
+                # Fallback: If removing stop words leaves us empty (e.g. search was "mouka foam"), 
+                # put them back so we don't search for nothing.
+                search_words = filtered_words if filtered_words else raw_words
+            else:
+                search_words = raw_words
+
+            # Build Query: Use AND logic (must contain Word A AND Word B)
+            # This fixes the "Orthopedic Mattress" issue.
+            final_query = Q()
             for word in search_words:
-                q_objects |= (
+                word_query = (
                     Q(name__icontains=word) |
                     Q(brand__name__icontains=word) |
                     Q(description__icontains=word) |
                     Q(category__title__icontains=word)
                 )
+                # Combine with AND (&) instead of OR (|)
+                final_query &= word_query
             
-            products = products.filter(q_objects)
-            
-            # Relevance score
-            relevance_cases = []
-            for word in search_words:
-                relevance_cases.extend([
-                    When(Q(name__icontains=word), then=Value(1)),
-                    When(Q(brand__name__icontains=word), then=Value(1)),
-                    When(Q(description__icontains=word), then=Value(1)),
-                    When(Q(category__title__icontains=word), then=Value(1)),
-                ])
-            
+            products = products.filter(final_query)
+
+        # ---------------------------------------------------------
+        # 2. STANDARD FILTERS
+        # ---------------------------------------------------------
+        if request.query_params.get('weight'):
+            products = products.filter(weight_id=request.query_params.get('weight'))
+
+        if request.query_params.get('brand'):
+            products = products.filter(brand_id=request.query_params.get('brand'))
+
+        if request.query_params.get('category'):
+            products = products.filter(category_id=request.query_params.get('category'))
+
+        # Price Range
+        min_p = request.query_params.get('min_price')
+        max_p = request.query_params.get('max_price')
+        if min_p or max_p:
             products = products.annotate(
-                relevance=Case(
-                    *relevance_cases,
-                    default=Value(0),
-                    output_field=IntegerField()
-                )
+                real_min_price=Min('variants__price'),
+                real_max_price=Max('variants__price')
             )
-            use_relevance_order = True
+            if min_p:
+                products = products.filter(real_min_price__gte=min_p)
+            if max_p:
+                products = products.filter(real_max_price__lte=max_p)
 
-        # Filter by weight
-        weight_id = request.query_params.get('weight', None)
-        if weight_id:
-            products = products.filter(weight_id=weight_id)
-
-        # Filter by brand
-        brand_id = request.query_params.get('brand', None)
-        if brand_id:
-            products = products.filter(brand_id=brand_id)
-
-        # Filter by category
-        category_id = request.query_params.get('category', None)
-        if category_id:
-            products = products.filter(category_id=category_id)
-
-        # Filter by price range
-        min_price = request.query_params.get('min_price', None)
-        max_price = request.query_params.get('max_price', None)
-        if min_price or max_price:
-            products = products.annotate(
-                min_variant_price=Min('variants__price'),
-                max_variant_price=Max('variants__price')
-            )
-            if min_price:
-                products = products.filter(min_variant_price__gte=min_price)
-            if max_price:
-                products = products.filter(max_variant_price__lte=max_price)
-
-        # Filter featured products
-        is_featured = request.query_params.get('is_featured', None)
-        if is_featured == 'true':
+        if request.query_params.get('is_featured') == 'true':
             products = products.filter(is_featured=True)
 
-        # Filter new arrivals
-        is_new = request.query_params.get('is_new', None)
-        if is_new == 'true':
+        if request.query_params.get('is_new') == 'true':
             products = products.filter(is_new_arrival=True)
 
-        # DEBUG: Print after filters
-        print(f"Products after filters: {products.count()}")
+        # ---------------------------------------------------------
+        # 3. SORTING & SHUFFLING
+        # ---------------------------------------------------------
+        sort_by = request.query_params.get('sort', 'shuffle') # Default to shuffle
 
-        # Get sort parameter
-        sort_by = request.query_params.get('sort', 'newest')
-        print(sort_by)
-        
-        # Apply ordering
-        if use_relevance_order:
-            # Search results by relevance
-            products = products.order_by('-relevance', '-created_at')
-        elif sort_by == 'price_asc':
-            products = products.annotate(
-                min_price=Min('variants__price')
-            ).order_by('min_price')
+        # If user is Searching, we usually want relevance or Newest, not random shuffle
+        # unless explicitly asked.
+        if search_query and sort_by == 'shuffle':
+             # Optional: Force 'newest' on search to ensure relevance isn't lost
+             # sort_by = 'newest' 
+             pass
+
+        if sort_by == 'price_asc':
+            products = products.annotate(p_min=Min('variants__price')).order_by('p_min')
         elif sort_by == 'price_desc':
-            products = products.annotate(
-                max_price=Max('variants__price')
-            ).order_by('-max_price')
+            products = products.annotate(p_max=Max('variants__price')).order_by('-p_max')
         elif sort_by == 'popular':
             products = products.order_by('-view_count')
         elif sort_by == 'newest':
             products = products.order_by('-created_at')
+        
         elif sort_by == 'shuffle':
-            # SIMPLE SHUFFLE METHOD - Get all IDs and shuffle them
-            product_ids = list(products.values_list('id', flat=True))
+            # 1. Get or Create Session Seed
+            if not request.session.session_key:
+                request.session.save() # Force session creation
             
-            # Seed random with session seed for consistency
+            session_seed = request.session.get('product_shuffle_seed')
+            if not session_seed:
+                session_seed = random.randint(1, 1000000)
+                request.session['product_shuffle_seed'] = session_seed
+            
+            # 2. Get ALL IDs that match current filters
+            # distinct() is crucial here before values_list
+            product_ids = list(products.distinct().values_list('id', flat=True))
+
+            # 3. Deterministic Shuffle
+            # Using the session seed ensures that for this user, the order 
+            # remains exactly the same as they scroll down (paginate).
             random.seed(session_seed)
             random.shuffle(product_ids)
-            
-            # Create ordering based on shuffled IDs
-            id_order = Case(*[When(id=id, then=pos) for pos, id in enumerate(product_ids)])
-            products = products.annotate(order=id_order).order_by('order')
-            
-            print(f"Shuffled order (first 10 IDs): {product_ids[:10]}")
 
-        # Remove duplicates
+            # 4. Apply Order using Case/When
+            # Check if list is empty to avoid SQL errors
+            if product_ids:
+                preserved_order = Case(
+                    *[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)],
+                    output_field=IntegerField(),
+                )
+                products = products.filter(pk__in=product_ids).annotate(
+                    random_order=preserved_order
+                ).order_by('random_order')
+            
+        # Ensure distinct results just in case joins created duplicates
+        # Note: distinct() must come before ordering in some DBs, but after annotate in Django
         products = products.distinct()
 
-        # DEBUG: Print final ordering
-        final_ids = list(products.values_list('id', flat=True)[:10])
-        print(f"Final product IDs (first 10): {final_ids}")
-
-        # Pagination
+        # ---------------------------------------------------------
+        # 4. PAGINATION
+        # ---------------------------------------------------------
         paginator = self.pagination_class()
         paginated_products = paginator.paginate_queryset(products, request)
         
