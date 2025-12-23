@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+{% load humanize %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            color: #ffffff;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.95;
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background-color: #10b981;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .order-info-box {
+            background-color: #f9fafb;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .order-id {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            color: #6b7280;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            color: #1f2937;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 30px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #1e40af;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .items-table th {
+            background-color: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .items-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #1f2937;
+        }
+        
+        .items-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .item-name {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .item-size {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .item-price {
+            font-weight: 600;
+            color: #1e40af;
+        }
+        
+        .totals-section {
+            background-color: #f9fafb;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 16px;
+        }
+        
+        .total-row.subtotal {
+            color: #4b5563;
+        }
+        
+        .total-row.shipping {
+            color: #4b5563;
+        }
+        
+        .total-row.grand-total {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1e40af;
+            padding-top: 15px;
+            border-top: 2px solid #e5e7eb;
+            margin-top: 10px;
+        }
+        
+        .shipping-address {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .shipping-address h3 {
+            color: #92400e;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .shipping-address p {
+            color: #78350f;
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        .contact-info {
+            background-color: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .contact-info h3 {
+            color: #1e40af;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .contact-info p {
+            color: #1e3a8a;
+            margin: 5px 0;
+        }
+        
+        .payment-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        
+        .payment-badge.pod {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        
+        .payment-badge.online {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            background-color: #fef3c7;
+            color: #92400e;
+            margin: 10px 0;
+        }
+        
+        .tracking-box {
+            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .tracking-box h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .tracking-box p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+        
+        .tracking-code {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            margin: 10px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background-color: #ffffff;
+            color: #1e40af;
+            padding: 14px 30px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 16px;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .cta-button:hover {
+            background-color: #f3f4f6;
+            transform: translateY(-2px);
+        }
+        
+        .next-steps {
+            background-color: #f0fdf4;
+            border: 2px solid #86efac;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        
+        .next-steps h3 {
+            color: #166534;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .next-steps ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .next-steps li {
+            color: #15803d;
+            padding: 8px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .next-steps li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #16a34a;
+            font-weight: 700;
+            font-size: 18px;
+        }
+        
+        .footer {
+            background-color: #1f2937;
+            color: #9ca3af;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .footer-logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+        
+        .footer p {
+            font-size: 14px;
+            margin: 8px 0;
+        }
+        
+        .social-links {
+            margin: 20px 0;
+        }
+        
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            color: #9ca3af;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .social-links a:hover {
+            color: #ffffff;
+        }
+        
+        .divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+            margin: 30px 0;
+        }
+        
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .content {
+                padding: 25px 20px;
+            }
+            
+            .items-table {
+                font-size: 14px;
+            }
+            
+            .items-table th,
+            .items-table td {
+                padding: 10px 8px;
+            }
+            
+            .total-row.grand-total {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="success-icon">✓</div>
+            <h1>Order Confirmed!</h1>
+            <p>Thank you for your purchase</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="content">
+            <p class="greeting">Hi <strong>{{ order.customer_name }}</strong>,</p>
+            <p>We're excited to let you know that we've received your order and it's being processed. Your mattress shopping experience is our priority!</p>
+            
+            <!-- Order Information Box -->
+            <div class="order-info-box">
+                <div class="order-id">Order #{{ order.order_id }}</div>
+                <div class="info-row">
+                    <span class="info-label">Order Date:</span>
+                    <span class="info-value">{{ order.created_at|date:"F d, Y" }} at {{ order.created_at|time:"g:i A" }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Payment Method:</span>
+                    <span class="info-value">
+                        {% if order.payment_method == 'pay_on_delivery' %}
+                            <span class="payment-badge pod">💵 Pay on Delivery</span>
+                        {% else %}
+                            <span class="payment-badge online">💳 Online Payment</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Order Status:</span>
+                    <span class="info-value">
+                        <span class="status-badge">{{ order.get_status_display }}</span>
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Order Items -->
+            <h2 class="section-title">📦 Order Details</h2>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order.items.all %}
+                    <tr>
+                        <td>
+                            <div class="item-name">{{ item.product_name }}</div>
+                            <div class="item-size">Size: {{ item.size }}</div>
+                        </td>
+                        <td style="text-align: center;">{{ item.quantity }}</td>
+                        <td style="text-align: right;" class="item-price">₦{{ item.price|floatformat:2|intcomma }}</td>
+                        <td style="text-align: right;" class="item-price">₦{{ item.subtotal|floatformat:2|intcomma }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <!-- Totals -->
+            <div class="totals-section">
+                {% with subtotal=order.total_amount|add:order.logistic_price|floatformat:"-2" %}
+                <div class="total-row subtotal">
+                    <span>Subtotal:</span>
+                    <span>₦{{ subtotal|floatformat:2|intcomma }}</span>
+                </div>
+                {% endwith %}
+                <div class="total-row shipping">
+                    <span>Shipping Fee:</span>
+                    <span>
+                        {% if order.logistic_price == 0 %}
+                            <span style="color: #10b981; font-weight: 600;">FREE</span>
+                        {% else %}
+                            ₦{{ order.logistic_price|floatformat:2|intcomma }}
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="total-row grand-total">
+                    <span>Total Amount:</span>
+                    <span>₦{{ order.total_amount|floatformat:2|intcomma }}</span>
+                </div>
+            </div>
+            
+            <!-- Shipping Address -->
+            <h2 class="section-title">🚚 Delivery Address</h2>
+            <div class="shipping-address">
+                <h3>📍 Shipping To:</h3>
+                <p>{{ order.shipping_address|linebreaks }}</p>
+            </div>
+            
+            <!-- Contact Information -->
+            <div class="contact-info">
+                <h3>📞 Contact Information</h3>
+                <p><strong>Email:</strong> {{ order.customer_email }}</p>
+                <p><strong>Phone:</strong> {{ order.customer_phone }}</p>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Tracking Information -->
+            <div class="tracking-box">
+                <h3>🔍 Track Your Order</h3>
+                <p>Use your order ID to track your delivery status</p>
+                <div class="tracking-code">{{ order.order_id }}</div>
+                <a href="https://mattressmarket.ng/track-order?order_id={{ order.order_id }}" class="cta-button">Track Order</a>
+            </div>
+            
+            <!-- Next Steps -->
+            <div class="next-steps">
+                <h3>✨ What Happens Next?</h3>
+                <ul>
+                    <li>We'll verify your order and prepare it for shipment</li>
+                    <li>You'll receive a notification when your order ships</li>
+                    <li>Our delivery partner will contact you for delivery coordination</li>
+                    <li>Enjoy your new mattress and quality sleep!</li>
+                </ul>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px;">
+                If you have any questions about your order, please don't hesitate to contact us.<br>
+                We're here to help! 💙
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-logo">Mattress Market</div>
+            <p>Quality Sleep, Quality Life</p>
+            <p style="margin-top: 15px;">📧 abujamattressmarket@gmail.com | 📞 +234 701 168 0725</p>
+            <p>📍 Abuja, Nigeria</p>
+            
+            <p style="font-size: 12px; opacity: 0.7;">
+                © 2024 Mattress Market. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

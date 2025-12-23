@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     OrderCreateView, OrderTrackView, UserOrderListView, OrderDetailView,
     WishlistView, WishlistAddView, WishlistRemoveView,
-    AddressListView, AddressCreateView, AddressUpdateView, AddressDeleteView
+    AddressListView, AddressCreateView, AddressUpdateView, AddressDeleteView,
+    PaymentCallbackView
 )
 from .admin_views import (
     AdminOrderListView, AdminOrderDetailView, AdminOrderUpdateStatusView,
@@ -12,6 +13,7 @@ from .admin_views import (
 urlpatterns = [
     # Public endpoints
     path('create/', OrderCreateView.as_view(), name='order-create'),
+    path('payment/callback/', PaymentCallbackView.as_view(), name='payment-callback'),
     path('track/', OrderTrackView.as_view(), name='order-track'),
     path('my-orders/', UserOrderListView.as_view(), name='user-orders'),
     path('<str:order_id>/', OrderDetailView.as_view(), name='order-detail'),

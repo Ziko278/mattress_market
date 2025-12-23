@@ -1,0 +1,77 @@
+===============================================
+        ORDER CONFIRMATION
+===============================================
+
+Hi {{ order.customer_name }},
+
+Thank you for your order! We've received your purchase and it's being processed.
+
+-----------------------------------------------
+ORDER INFORMATION
+-----------------------------------------------
+
+Order ID: {{ order.order_id }}
+Order Date: {{ order.created_at|date:"F d, Y" }} at {{ order.created_at|time:"g:i A" }}
+Payment Method: {{ order.get_payment_method_display }}
+Status: {{ order.get_status_display }}
+
+-----------------------------------------------
+ORDER DETAILS
+-----------------------------------------------
+
+{% for item in order.items.all %}
+{{ item.product_name }}
+Size: {{ item.size }}
+Quantity: {{ item.quantity }} x ₦{{ item.price|floatformat:2 }}
+Subtotal: ₦{{ item.subtotal|floatformat:2 }}
+
+{% endfor %}
+-----------------------------------------------
+TOTALS
+-----------------------------------------------
+
+{% with subtotal=order.total_amount|add:order.logistic_price %}
+Subtotal: ₦{{ subtotal|floatformat:2 }}
+{% endwith %}
+Shipping Fee: {% if order.logistic_price == 0 %}FREE{% else %}₦{{ order.logistic_price|floatformat:2 }}{% endif %}
+-----------------------------------------------
+TOTAL AMOUNT: ₦{{ order.total_amount|floatformat:2 }}
+-----------------------------------------------
+
+-----------------------------------------------
+DELIVERY ADDRESS
+-----------------------------------------------
+
+{{ order.shipping_address }}
+
+-----------------------------------------------
+CONTACT INFORMATION
+-----------------------------------------------
+
+Email: {{ order.customer_email }}
+Phone: {{ order.customer_phone }}
+
+-----------------------------------------------
+TRACKING INFORMATION
+-----------------------------------------------
+
+Track your order using this Order ID: {{ order.order_id }}
+Visit: https://mattressmarket.ng/track-order?order_id={{ order.order_id }}
+
+-----------------------------------------------
+WHAT HAPPENS NEXT?
+-----------------------------------------------
+
+✓ We'll verify your order and prepare it for shipment
+✓ You'll receive a notification when your order ships
+✓ Our delivery partner will contact you for coordination
+✓ Enjoy your new mattress and quality sleep!
+
+-----------------------------------------------
+
+If you have any questions, please contact us:
+Email: abujamattressmarket@gmail.com
+Phone: +234 701 168 0725
+
+Mattress Market - Quality Sleep, Quality Life
+© 2024 Mattress Market. All rights reserved.
