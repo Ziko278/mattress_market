@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q, F, Max, Min, Count, Case, When, IntegerField, Value
 from django.db.models.functions import Concat
+
 import hashlib
 import random
 from django.db.models import Q, Avg
@@ -56,146 +57,134 @@ class WeightListView(APIView):
         serializer = ProductWeightSerializer(weights, many=True)
         return Response(serializer.data)
 
-class ProductListView(APIView):
-    """
-    Get products with filters, intelligent search, and session-consistent shuffling.
-    """
-    pagination_class = StandardResultsPagination
 
-    # Words to ignore if the search query contains other distinct words
+class ProductListView(APIView):
+    pagination_class = StandardResultsPagination # Ensure this is imported
+
+    # Words to ignore to improve search quality
     STOP_WORDS = {
         'pillow', 'pillows', 'mattress', 'mattresses', 'foam', 'foams',
         'vitafoam', 'mouka', 'moukafoam', 'winco', 'wincofoam', 'bed', 'bedding'
     }
 
     def get(self, request):
+        # 1. Start with Base Query
         products = ProductModel.objects.all()
 
         # ---------------------------------------------------------
-        # 1. HANDLE SEARCH (Intelligent Filtering)
+        # 2. INTELLIGENT SEARCH
         # ---------------------------------------------------------
         search_query = request.query_params.get('search', '').strip()
+        is_searching = bool(search_query)
         
-        if search_query:
-            # Split query into words
+        if is_searching:
             raw_words = [w.lower() for w in search_query.split() if w.strip()]
             
-            # Filter Logic: 
-            # If we have more than 1 word, try to remove STOP_WORDS.
-            # Example 1: "Vita Helix Mattress" -> becomes ["vita", "helix"]
-            # Example 2: "Mattress" -> remains ["mattress"] (because it's the only word)
+            # Remove stop words ONLY if there are other specific words
             if len(raw_words) > 1:
                 filtered_words = [w for w in raw_words if w not in self.STOP_WORDS]
-                # Fallback: If removing stop words leaves us empty (e.g. search was "mouka foam"), 
-                # put them back so we don't search for nothing.
                 search_words = filtered_words if filtered_words else raw_words
             else:
                 search_words = raw_words
 
-            # Build Query: Use AND logic (must contain Word A AND Word B)
-            # This fixes the "Orthopedic Mattress" issue.
+            # Use AND logic: Product must match ALL remaining words
             final_query = Q()
             for word in search_words:
-                word_query = (
+                final_query &= (
                     Q(name__icontains=word) |
                     Q(brand__name__icontains=word) |
                     Q(description__icontains=word) |
                     Q(category__title__icontains=word)
                 )
-                # Combine with AND (&) instead of OR (|)
-                final_query &= word_query
-            
             products = products.filter(final_query)
 
         # ---------------------------------------------------------
-        # 2. STANDARD FILTERS
+        # 3. STANDARD FILTERS
         # ---------------------------------------------------------
         if request.query_params.get('weight'):
             products = products.filter(weight_id=request.query_params.get('weight'))
-
         if request.query_params.get('brand'):
             products = products.filter(brand_id=request.query_params.get('brand'))
-
         if request.query_params.get('category'):
             products = products.filter(category_id=request.query_params.get('category'))
-
-        # Price Range
+        
+        # Price Filter
         min_p = request.query_params.get('min_price')
         max_p = request.query_params.get('max_price')
         if min_p or max_p:
             products = products.annotate(
-                real_min_price=Min('variants__price'),
-                real_max_price=Max('variants__price')
+                real_min=Min('variants__price'), 
+                real_max=Max('variants__price')
             )
-            if min_p:
-                products = products.filter(real_min_price__gte=min_p)
-            if max_p:
-                products = products.filter(real_max_price__lte=max_p)
-
-        if request.query_params.get('is_featured') == 'true':
-            products = products.filter(is_featured=True)
-
-        if request.query_params.get('is_new') == 'true':
-            products = products.filter(is_new_arrival=True)
+            if min_p: products = products.filter(real_min__gte=min_p)
+            if max_p: products = products.filter(real_max__lte=max_p)
 
         # ---------------------------------------------------------
-        # 3. SORTING & SHUFFLING
+        # 4. CRITICAL: DISTINCT BEFORE ORDERING
         # ---------------------------------------------------------
-        sort_by = request.query_params.get('sort', 'shuffle') # Default to shuffle
-
-        # If user is Searching, we usually want relevance or Newest, not random shuffle
-        # unless explicitly asked.
-        if search_query and sort_by == 'shuffle':
-             # Optional: Force 'newest' on search to ensure relevance isn't lost
-             # sort_by = 'newest' 
-             pass
-
-        if sort_by == 'price_asc':
-            products = products.annotate(p_min=Min('variants__price')).order_by('p_min')
-        elif sort_by == 'price_desc':
-            products = products.annotate(p_max=Max('variants__price')).order_by('-p_max')
-        elif sort_by == 'popular':
-            products = products.order_by('-view_count')
-        elif sort_by == 'newest':
-            products = products.order_by('-created_at')
-        
-        elif sort_by == 'shuffle':
-            # 1. Get or Create Session Seed
-            if not request.session.session_key:
-                request.session.save() # Force session creation
-            
-            session_seed = request.session.get('product_shuffle_seed')
-            if not session_seed:
-                session_seed = random.randint(1, 1000000)
-                request.session['product_shuffle_seed'] = session_seed
-            
-            # 2. Get ALL IDs that match current filters
-            # distinct() is crucial here before values_list
-            product_ids = list(products.distinct().values_list('id', flat=True))
-
-            # 3. Deterministic Shuffle
-            # Using the session seed ensures that for this user, the order 
-            # remains exactly the same as they scroll down (paginate).
-            random.seed(session_seed)
-            random.shuffle(product_ids)
-
-            # 4. Apply Order using Case/When
-            # Check if list is empty to avoid SQL errors
-            if product_ids:
-                preserved_order = Case(
-                    *[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)],
-                    output_field=IntegerField(),
-                )
-                products = products.filter(pk__in=product_ids).annotate(
-                    random_order=preserved_order
-                ).order_by('random_order')
-            
-        # Ensure distinct results just in case joins created duplicates
-        # Note: distinct() must come before ordering in some DBs, but after annotate in Django
+        # We must apply distinct here so we don't fetch duplicates for the shuffle list
         products = products.distinct()
 
         # ---------------------------------------------------------
-        # 4. PAGINATION
+        # 5. SORTING & SHUFFLING
+        # ---------------------------------------------------------
+        sort_by = request.query_params.get('sort')
+
+        # DEFAULT BEHAVIOR: 
+        # If searching -> Sort by Relevance (implicitly handled by database mostly, or add logic)
+        # If browsing -> Shuffle (Random)
+        if not sort_by:
+            sort_by = 'relevance' if is_searching else 'shuffle'
+
+        if sort_by == 'price_asc':
+            products = products.annotate(p_min=Min('variants__price')).order_by('p_min')
+        
+        elif sort_by == 'price_desc':
+            products = products.annotate(p_max=Max('variants__price')).order_by('-p_max')
+        
+        elif sort_by == 'newest':
+            products = products.order_by('-created_at')
+            
+        elif sort_by == 'shuffle':
+            # --- THE SHUFFLE FIX ---
+            
+            # 1. Get Session Seed (Consistent for this user's browsing session)
+            if not request.session.session_key:
+                request.session.save()
+            
+            session_seed = request.session.get('product_shuffle_seed')
+            if not session_seed:
+                # Use a large range to avoid collision
+                session_seed = random.randint(1, 1000000)
+                request.session['product_shuffle_seed'] = session_seed
+
+            # 2. Extract IDs specifically for shuffling
+            # We convert to a list immediately to manipulate in Python
+            product_ids = list(products.values_list('id', flat=True))
+
+            # 3. Deterministic Shuffle
+            # Using the same seed guarantees the same order for this user
+            random.seed(session_seed)
+            random.shuffle(product_ids)
+
+            # 4. Force the Database to respect this order
+            if product_ids:
+                # Create a list of When() cases
+                # "When ID is X, then position is 0", "When ID is Y, then position is 1"...
+                ordering = [When(pk=pk, then=Value(i)) for i, pk in enumerate(product_ids)]
+                
+                # Rebuild queryset specifically for ordering
+                # We filter by pk__in to ensure we only get these items (safety)
+                # We use ProductModel.objects.filter to start clean and avoid "distinct" conflicts
+                products = ProductModel.objects.filter(pk__in=product_ids).annotate(
+                    random_order=Case(
+                        *ordering,
+                        output_field=IntegerField()
+                    )
+                ).order_by('random_order')
+
+        # ---------------------------------------------------------
+        # 6. PAGINATION
         # ---------------------------------------------------------
         paginator = self.pagination_class()
         paginated_products = paginator.paginate_queryset(products, request)
@@ -207,7 +196,8 @@ class ProductListView(APIView):
         )
         
         return paginator.get_paginated_response(serializer.data)
-    
+
+
 class ProductDetailView(APIView):
     def get(self, request, slug):
         try:
