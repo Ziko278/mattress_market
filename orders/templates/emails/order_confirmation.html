@@ -485,7 +485,7 @@
             
             <!-- Totals -->
             <div class="totals-section">
-                {% with subtotal=order.total_amount|add:-order.logistic_price|floatformat:"-2" %}
+                {% with subtotal=order.total_amount|add:order.logistic_price|floatformat:"-2" %}
                 <div class="total-row subtotal">
                     <span>Subtotal:</span>
                     <span>₦{{ subtotal|floatformat:2|intcomma }}</span>
