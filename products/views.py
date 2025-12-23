@@ -93,7 +93,7 @@ class ProductListView(APIView):
                 final_query &= (
                     Q(name__icontains=word) |
                     Q(brand__name__icontains=word) |
-                    Q(description__icontains=word) |
+                    #Q(description__icontains=word) |
                     Q(category__title__icontains=word)
                 )
             products = products.filter(final_query)
