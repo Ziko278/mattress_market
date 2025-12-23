@@ -485,11 +485,12 @@
             
             <!-- Totals -->
             <div class="totals-section">
+                {% with subtotal=order.total_amount|add:-order.logistic_price|floatformat:"-2" %}
                 <div class="total-row subtotal">
                     <span>Subtotal:</span>
-                    <span>₦{{ order.total_amount|add:-order.logistic_price|floatformat:2|intcomma }}</span>
+                    <span>₦{{ subtotal|floatformat:2|intcomma }}</span>
                 </div>
-                
+                {% endwith %}
                 <div class="total-row shipping">
                     <span>Shipping Fee:</span>
                     <span>
@@ -500,7 +501,6 @@
                         {% endif %}
                     </span>
                 </div>
-                
                 <div class="total-row grand-total">
                     <span>Total Amount:</span>
                     <span>₦{{ order.total_amount|floatformat:2|intcomma }}</span>
