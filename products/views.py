@@ -102,11 +102,11 @@ class ProductListView(APIView):
         # 3. STANDARD FILTERS
         # ---------------------------------------------------------
         if request.query_params.get('weight'):
-            products = products.filter(weight_id=request.query_params.get('weight'))
+            products = products.filter(weight__weight__iexact=request.query_params.get('weight'))
         if request.query_params.get('brand'):
-            products = products.filter(brand_id=request.query_params.get('brand'))
+            products = products.filter(brand__name__iexact=request.query_params.get('brand'))
         if request.query_params.get('category'):
-            products = products.filter(category_id=request.query_params.get('category'))
+            products = products.filter(category__title__iexact=request.query_params.get('category'))
         
         # Price Filter
         min_p = request.query_params.get('min_price')
