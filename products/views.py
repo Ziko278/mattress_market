@@ -58,10 +58,11 @@ class WeightListView(APIView):
         return Response(serializer.data)
 
 
-class ProductListView(APIView):
-    pagination_class = StandardResultsPagination # Ensure this is imported
+# In your views.py - Update the ProductListView class
 
-    # Words to ignore to improve search quality
+class ProductListView(APIView):
+    pagination_class = StandardResultsPagination
+
     STOP_WORDS = {
         'pillow', 'pillows', 'mattress', 'mattresses', 'foam', 'foams',
         'vitafoam', 'mouka', 'moukafoam', 'winco', 'wincofoam', 'bed', 'bedding'
@@ -72,6 +73,13 @@ class ProductListView(APIView):
         products = ProductModel.objects.all()
 
         # ---------------------------------------------------------
+        # NEW: CHECK FOR SITEMAP REQUEST (NO PAGINATION)
+        # ---------------------------------------------------------
+        # If ?all=true or ?limit=all, return everything without pagination
+        no_pagination = request.query_params.get('all') == 'true' or \
+                       request.query_params.get('limit') == 'all'
+        
+        # ---------------------------------------------------------
         # 2. INTELLIGENT SEARCH
         # ---------------------------------------------------------
         search_query = request.query_params.get('search', '').strip()
@@ -80,20 +88,17 @@ class ProductListView(APIView):
         if is_searching:
             raw_words = [w.lower() for w in search_query.split() if w.strip()]
             
-            # Remove stop words ONLY if there are other specific words
             if len(raw_words) > 1:
                 filtered_words = [w for w in raw_words if w not in self.STOP_WORDS]
                 search_words = filtered_words if filtered_words else raw_words
             else:
                 search_words = raw_words
 
-            # Use AND logic: Product must match ALL remaining words
             final_query = Q()
             for word in search_words:
                 final_query &= (
                     Q(name__icontains=word) |
                     Q(brand__name__icontains=word) |
-                    #Q(description__icontains=word) |
                     Q(category__title__icontains=word)
                 )
             products = products.filter(final_query)
@@ -122,17 +127,27 @@ class ProductListView(APIView):
         # ---------------------------------------------------------
         # 4. CRITICAL: DISTINCT BEFORE ORDERING
         # ---------------------------------------------------------
-        # We must apply distinct here so we don't fetch duplicates for the shuffle list
         products = products.distinct()
 
         # ---------------------------------------------------------
-        # 5. SORTING & SHUFFLING
+        # NEW: IF NO PAGINATION REQUESTED, RETURN ALL
+        # ---------------------------------------------------------
+        if no_pagination:
+            # Simple ordering for sitemap (by ID or created_at)
+            products = products.order_by('-created_at')
+            serializer = ProductListSerializer(
+                products, 
+                many=True, 
+                context={'request': request}
+            )
+            # Return all products without pagination wrapper
+            return Response(serializer.data)
+
+        # ---------------------------------------------------------
+        # 5. SORTING & SHUFFLING (Only for paginated requests)
         # ---------------------------------------------------------
         sort_by = request.query_params.get('sort')
 
-        # DEFAULT BEHAVIOR: 
-        # If searching -> Sort by Relevance (implicitly handled by database mostly, or add logic)
-        # If browsing -> Shuffle (Random)
         if not sort_by:
             sort_by = 'relevance' if is_searching else 'shuffle'
 
@@ -146,36 +161,22 @@ class ProductListView(APIView):
             products = products.order_by('-created_at')
             
         elif sort_by == 'shuffle':
-            # --- THE SHUFFLE FIX ---
-            
-            # 1. Get Session Seed (Consistent for this user's browsing session)
             if not request.session.session_key:
                 request.session.save()
             
             session_seed = request.session.get('product_shuffle_seed')
             if not session_seed:
-                # Use a large range to avoid collision
                 session_seed = random.randint(1, 1000000)
                 request.session['product_shuffle_seed'] = session_seed
 
-            # 2. Extract IDs specifically for shuffling
-            # We convert to a list immediately to manipulate in Python
             product_ids = list(products.values_list('id', flat=True))
 
-            # 3. Deterministic Shuffle
-            # Using the same seed guarantees the same order for this user
             random.seed(session_seed)
             random.shuffle(product_ids)
 
-            # 4. Force the Database to respect this order
             if product_ids:
-                # Create a list of When() cases
-                # "When ID is X, then position is 0", "When ID is Y, then position is 1"...
                 ordering = [When(pk=pk, then=Value(i)) for i, pk in enumerate(product_ids)]
                 
-                # Rebuild queryset specifically for ordering
-                # We filter by pk__in to ensure we only get these items (safety)
-                # We use ProductModel.objects.filter to start clean and avoid "distinct" conflicts
                 products = ProductModel.objects.filter(pk__in=product_ids).annotate(
                     random_order=Case(
                         *ordering,
@@ -184,7 +185,7 @@ class ProductListView(APIView):
                 ).order_by('random_order')
 
         # ---------------------------------------------------------
-        # 6. PAGINATION
+        # 6. PAGINATION (Only for regular requests)
         # ---------------------------------------------------------
         paginator = self.pagination_class()
         paginated_products = paginator.paginate_queryset(products, request)
@@ -196,7 +197,7 @@ class ProductListView(APIView):
         )
         
         return paginator.get_paginated_response(serializer.data)
-
+    
 
 class ProductDetailView(APIView):
     def get(self, request, slug):
