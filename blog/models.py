@@ -52,7 +52,18 @@ class BlogPostModel(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.title.lower())
+        if not self.slug:
+            base_slug = slugify(self.title.lower())
+            slug = base_slug
+            counter = 1
+
+            # Check if slug exists and increment until we find a unique one
+            while BlogPostModel.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+
+            self.slug = slug
+
         super().save(*args, **kwargs)
 
     def __str__(self):

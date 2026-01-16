@@ -16,6 +16,30 @@ class BlogTagSerializer(serializers.ModelSerializer):
         fields = ['id', 'title']
 
 
+class BlogPostCreateSerializer(serializers.ModelSerializer):
+    category = serializers.PrimaryKeyRelatedField(queryset=BlogCategoryModel.objects.all())
+    tags = serializers.PrimaryKeyRelatedField(many=True, queryset=BlogTagModel.objects.all(), required=False)
+    featured_image = serializers.ImageField(required=False, allow_null=True)  # Make optional
+
+    class Meta:
+        model = BlogPostModel
+        fields = ['title', 'category', 'tags', 'excerpt', 'featured_image', 'content', 'status']
+
+    def validate_content(self, value):
+        # If it's a string, try to parse it as JSON
+        if isinstance(value, str):
+            try:
+                import json
+                return json.loads(value)
+            except json.JSONDecodeError:
+                # If it's not valid JSON, wrap it in our structure
+                return {
+                    "type": "html",
+                    "html": value
+                }
+        return value
+
+
 class BlogPostListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.title', read_only=True)
     featured_image = serializers.SerializerMethodField()

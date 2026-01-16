@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAdminUser
 from .models import BlogPostModel, BlogCategoryModel, BlogTagModel, BlogCommentModel
 from .serializers import (
     BlogPostDetailSerializer, BlogCategorySerializer,
-    BlogTagSerializer, BlogCommentSerializer
+    BlogTagSerializer, BlogCommentSerializer, BlogPostCreateSerializer
 )
 
 
@@ -125,10 +125,17 @@ class AdminBlogPostListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = BlogPostDetailSerializer(data=request.data)
+        # Use BlogPostCreateSerializer for creating posts
+        serializer = BlogPostCreateSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Save the post and get the instance
+            post = serializer.save()
+            # Return the created post with full details
+            response_serializer = BlogPostDetailSerializer(post, context={'request': request})
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+        # If validation fails, return the errors
+        print("Serializer errors:", serializer.errors)  # For debugging
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -141,7 +148,7 @@ class AdminBlogPostDetailView(APIView):
     def get(self, request, pk):
         try:
             post = BlogPostModel.objects.get(pk=pk)
-            serializer = BlogPostDetailSerializer(post)
+            serializer = BlogPostDetailSerializer(post, context={'request': request})  # Add context here
             return Response(serializer.data)
         except BlogPostModel.DoesNotExist:
             return Response({"error": "Blog post not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -149,10 +156,13 @@ class AdminBlogPostDetailView(APIView):
     def put(self, request, pk):
         try:
             post = BlogPostModel.objects.get(pk=pk)
-            serializer = BlogPostDetailSerializer(post, data=request.data, partial=True)
+            # Use BlogPostCreateSerializer for updating
+            serializer = BlogPostCreateSerializer(post, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data)
+                # Return the updated post with full details
+                response_serializer = BlogPostDetailSerializer(post, context={'request': request})
+                return Response(response_serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except BlogPostModel.DoesNotExist:
             return Response({"error": "Blog post not found"}, status=status.HTTP_404_NOT_FOUND)
