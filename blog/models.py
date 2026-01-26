@@ -37,7 +37,7 @@ class BlogPostModel(models.Model):
     )
 
     title = models.CharField(max_length=250)
-    slug = models.SlugField(blank=True, unique=True)
+    slug = models.SlugField(blank=True, unique=True, max_length=255)  # ← Increase max_length
     category = models.ForeignKey(BlogCategoryModel, on_delete=models.CASCADE)
     tags = models.ManyToManyField(BlogTagModel, blank=True)
     excerpt = models.TextField(help_text="Short description for preview")
@@ -54,6 +54,11 @@ class BlogPostModel(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             base_slug = slugify(self.title.lower())
+
+            # Truncate base_slug to leave room for counter suffix (e.g., "-999")
+            max_base_length = 250  # Leave 5 chars for potential "-9999" suffix
+            base_slug = base_slug[:max_base_length]
+
             slug = base_slug
             counter = 1
 
@@ -69,7 +74,7 @@ class BlogPostModel(models.Model):
     def __str__(self):
         return self.title.upper()
 
-
+    
 class BlogCommentModel(models.Model):
     STATUS_CHOICES = (
         ('active', 'Active'),
