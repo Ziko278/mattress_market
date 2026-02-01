@@ -512,7 +512,23 @@
             <div class="shipping-address">
                 <h3>📍 Shipping To:</h3>
                 <p>{{ order.shipping_address|linebreaks }}</p>
+                <p style="margin-top: 12px;"><strong>📅 Expected Date:</strong>
+                    {% if order.expected_delivery_date %}
+                        {{ order.expected_delivery_date|date:"F d, Y" }}
+                    {% else %}
+                        TBD
+                    {% endif %}
+                </p>
+                <p><strong>🕐 Expected Time:</strong>
+                    {% if order.expected_delivery_time %}
+                        {{ order.expected_delivery_time }}
+                    {% else %}
+                        TBD
+                    {% endif %}
+                </p>
             </div>
+
+
             
             <!-- Contact Information -->
             <div class="contact-info">

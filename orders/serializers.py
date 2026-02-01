@@ -34,7 +34,8 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_id', 'customer_name', 'customer_email', 'customer_phone',
             'shipping_address', 'payment_method', 'status',
-            'logistic_price', 'total_amount', 'items', 'created_at', 'updated_at'
+            'logistic_price', 'total_amount', 'items', 'created_at', 'updated_at',
+            'expected_delivery_date', 'expected_delivery_time'
         ]
         read_only_fields = ['order_id', 'created_at', 'updated_at',
                             'logistic_price', 'total_amount']
@@ -48,8 +49,12 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         model = OrderModel
         # do NOT accept client total_amount — server computes it
         fields = ['user', 'customer_name', 'customer_email', 'customer_phone',
-                  'shipping_address', 'payment_method', 'items']
-        extra_kwargs = {'user': {'required': False, 'allow_null': True}}
+                  'shipping_address', 'payment_method', 'items',
+                  'expected_delivery_date', 'expected_delivery_time']
+        extra_kwargs = {'user': {'required': False, 'allow_null': True},
+                        'expected_delivery_date': {'required': False, 'allow_null': True},  # <-- add
+                        'expected_delivery_time': {'required': False, 'allow_null': True},
+                        }
 
     def _calculate_logistic_fee(self, subtotal: Decimal) -> Decimal:
         """

@@ -52,7 +52,8 @@ class OrderModel(models.Model):
     is_paid = models.BooleanField(default=False)
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_status = models.CharField(max_length=20, default='pending')  # 'pending'|'paid'|'failed'
-
+    expected_delivery_date = models.DateField(null=True, blank=True)
+    expected_delivery_time = models.CharField(max_length=50, null=True, blank=True)  # e.g. "9:00 AM - 12:00 PM"
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
