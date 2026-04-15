@@ -94,7 +94,7 @@ class ProductModel(models.Model):
 
 class ProductVariantModel(models.Model):
     product = models.ForeignKey(ProductModel, on_delete=models.CASCADE, related_name='variants')
-    slug = models.SlugField(blank=True)
+    slug = models.SlugField(max_length=500, blank=True)
     size = models.ForeignKey(ProductSizeModel, on_delete=models.CASCADE, null=True, blank=True)
     thickness = models.CharField(max_length=100, blank=True, null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
