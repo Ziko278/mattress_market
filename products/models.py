@@ -105,8 +105,14 @@ class ProductVariantModel(models.Model):
             slug_parts.append(self.size.size.lower())
         if self.thickness:
             slug_parts.append(self.thickness.lower())
-        self.slug = slugify(' '.join(slug_parts))
+        base_slug = slugify(' '.join(slug_parts))
+        # append pk if it exists (i.e. on update), otherwise save first
+        self.slug = f"{base_slug}-{self.pk}" if self.pk else base_slug
         super().save(*args, **kwargs)
+        # now update with pk if it was a new object
+        if not self.slug.endswith(str(self.pk)):
+            self.slug = f"{base_slug}-{self.pk}"
+            ProductVariantModel.objects.filter(pk=self.pk).update(slug=self.slug)
 
     def __str__(self):
         return f"{self.product.name} - {self.size} - ₦{self.price}"
